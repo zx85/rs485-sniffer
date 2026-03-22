@@ -3,6 +3,7 @@ import time
 import ubinascii
 import network
 import socket
+import webrepl
 
 # Configuration
 UART_ID = 0
@@ -72,6 +73,7 @@ def main():
     PIN_DI.init(machine.Pin.OUT, value=0)
 
     ensure_wifi()
+    webrepl.start()
     # Setup TCP Server
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
