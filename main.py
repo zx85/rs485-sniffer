@@ -8,7 +8,9 @@ BAUD_RATE = 9600  # Ensure this matches the target RS485 bus speed
 
 # Pin Definitions
 PIN_DI = machine.Pin(0, machine.Pin.OUT, value=0)  # Connect to MAX485 DI (Driver Input)
-PIN_RO = machine.Pin(1)  # Connect to MAX485 RO (Receiver Output)
+PIN_RO = machine.Pin(
+    1
+)  # Connect to MAX485 RO. WARNING: 5V output! Use 2k/3k divider to Pico.
 PIN_DE = machine.Pin(
     2, machine.Pin.OUT, value=0
 )  # Connect to MAX485 DE (Driver Enable)
