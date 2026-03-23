@@ -66,6 +66,22 @@ def ensure_wifi():
         print(f"Connected. IP: {wlan.ifconfig()[0]}")
 
 
+def handle_error(e, client_socket):
+    msg = f"!!ERROR!! {e}"
+    print(msg)
+    try:
+        with open("error.log", "a") as f:
+            f.write(f"{time.ticks_ms()}: {msg}\n")
+    except OSError:
+        pass
+
+    if client_socket:
+        try:
+            client_socket.send((msg + "\n").encode("utf-8"))
+        except OSError:
+            pass
+
+
 def main():
     # Initialize UART
     # We only configure RX. We explicitly re-assert DI as Low after init just in case.
@@ -73,7 +89,11 @@ def main():
     PIN_DI.init(machine.Pin.OUT, value=0)
 
     ensure_wifi()
-    webrepl.start()
+    wlan = network.WLAN(network.STA_IF)
+    try:
+        webrepl.start()
+    except Exception as e:
+        print(f"WebREPL failed to start (ignoring): {e}")
     # Setup TCP Server
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -87,44 +107,53 @@ def main():
     print(f"Listening for TCP connections on port {SERVER_PORT}...")
 
     while True:
-        # Handle Network Connections
         try:
-            # Accept new connection if we don't have one or just to handle re-connects
-            # For simplicity, we accept one client at a time in this loop
-            if not client_socket:
-                res = s.accept()
-                if res:
-                    client_socket, addr = res
-                    client_socket.setblocking(False)
-                    print(f"Client connected from {addr}")
-        except OSError:
-            # No new connection
-            pass
+            if not wlan.isconnected():
+                print("WiFi connection lost, reconnecting...")
+                ensure_wifi()
 
-        # Check if there is data in the buffer
-        if uart.any():
-            # Read all available bytes
-            data = uart.read()
+            # Handle Network Connections
+            try:
+                # Accept new connection if we don't have one or just to handle re-connects
+                # For simplicity, we accept one client at a time in this loop
+                if not client_socket:
+                    res = s.accept()
+                    if res:
+                        client_socket, addr = res
+                        client_socket.setblocking(False)
+                        print(f"Client connected from {addr}")
+            except OSError:
+                # No new connection
+                pass
 
-            if data:
-                # Get current timestamp (milliseconds since boot)
-                timestamp = time.ticks_ms()
+            # Check if there is data in the buffer
+            if uart.any():
+                # Read all available bytes
+                data = uart.read()
 
-                # Convert binary data to hex string separated by spaces
-                hex_str = ubinascii.hexlify(data, " ").decode("utf-8")
-                output_line = f"[{timestamp} ms] {hex_str}"
+                if data:
+                    # Get current timestamp (milliseconds since boot)
+                    timestamp = time.ticks_ms()
 
-                # Print to local console
-                print(output_line)
+                    # Convert binary data to hex string separated by spaces
+                    hex_str = ubinascii.hexlify(data, " ").decode("utf-8")
+                    output_line = f"[{timestamp} ms] {hex_str}"
 
-                # Send to network client if connected
-                if client_socket:
-                    try:
-                        client_socket.send((output_line + "\n").encode("utf-8"))
-                    except OSError:
-                        print("Client disconnected")
-                        client_socket.close()
-                        client_socket = None
+                    # Print to local console
+                    print(output_line)
+
+                    # Send to network client if connected
+                    if client_socket:
+                        try:
+                            client_socket.send((output_line + "\n").encode("utf-8"))
+                        except OSError:
+                            print("Client disconnected")
+                            client_socket.close()
+                            client_socket = None
+
+        except Exception as e:
+            handle_error(e, client_socket)
+            time.sleep(1)
 
 
 if __name__ == "__main__":
